@@ -154,7 +154,10 @@ func (p *ConfigtestCmd) Execute(_ context.Context, f *flag.FlagSet, _ ...interfa
 		return subcommands.ExitFailure
 	}
 
-	util.Log.Info("Checking sudo configuration...")
+	util.Log.Info("Checking dependendies...")
+	scan.CheckDependencies()
+
+	util.Log.Info("Checking sudo settings...")
 	scan.CheckIfSudoNoPasswd()
 
 	scan.PrintSSHableServerNames()

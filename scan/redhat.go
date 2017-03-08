@@ -112,7 +112,7 @@ func (o *redhat) checkIfSudoNoPasswd() error {
 	switch o.Distro.Family {
 	case "centos":
 		cmds = []cmd{
-			{"yum --changelog --assumeno update yum", zero},
+			{"yum --changelog --assumeno update yum", []int{0, 1}},
 		}
 
 	case "rhel":
@@ -139,80 +139,60 @@ func (o *redhat) checkIfSudoNoPasswd() error {
 	}
 
 	for _, c := range cmds {
-		o.log.Infof("Checking... sudo %s", c.cmd)
-		r := o.exec(util.PrependProxyEnv(c.cmd), o.sudo())
+		cmd := util.PrependProxyEnv(c.cmd)
+		o.log.Infof("Checking... sudo %s", cmd)
+		r := o.exec(util.PrependProxyEnv(cmd), o.sudo())
 		if !r.isSuccess(c.expectedStatusCodes...) {
 			o.log.Errorf("Check sudo or proxy settings: %s", r)
 			return fmt.Errorf("Failed to sudo: %s", r)
 		}
 	}
+	o.log.Infof("Sudo... Pass")
 	return nil
 }
 
-// CentOS 5 ... yum-changelog
-// CentOS 6 ... yum-plugin-changelog
-// CentOS 7 ... yum-plugin-changelog
-// RHEL, Amazon ... no additinal packages needed
+// CentOS 5 	... yum-changelog
+// CentOS 6, 7 	... yum-plugin-changelog
+// RHEL 5     	... yum-security
+// RHEL 6, 7    ... -
+// Amazon 		... -
 func (o *redhat) checkDependencies() error {
+	var packName string
+	if o.Distro.Family == "amazon" {
+		return nil
+	}
+
+	majorVersion, err := o.Distro.MajorVersion()
+	if err != nil {
+		msg := fmt.Sprintf("Not implemented yet: %s, err: %s", o.Distro, err)
+		o.log.Errorf(msg)
+		return fmt.Errorf(msg)
+	}
+
 	switch o.Distro.Family {
-	case "rhel", "amazon":
-		return nil
-
 	case "centos":
-		majorVersion, err := o.Distro.MajorVersion()
-		if err != nil {
-			return fmt.Errorf("Not implemented yet: %s, err: %s", o.Distro, err)
-		}
-
-		var name = "yum-plugin-changelog"
-		if majorVersion < 6 {
-			name = "yum-changelog"
-		}
-
-		cmd := "rpm -q " + name
-		if r := o.exec(cmd, noSudo); r.isSuccess() {
-			return nil
-		}
-		o.lackDependencies = []string{name}
-		return nil
-
-	default:
-		return fmt.Errorf("Not implemented yet: %s", o.Distro)
-	}
-}
-
-func (o *redhat) install() error {
-	for _, name := range o.lackDependencies {
-		cmd := util.PrependProxyEnv("yum install -y " + name)
-		if r := o.exec(cmd, sudo); !r.isSuccess() {
-			return fmt.Errorf("Failed to SSH: %s", r)
-		}
-		o.log.Infof("Installed: %s", name)
-	}
-	return nil
-}
-
-func (o *redhat) checkRequiredPackagesInstalled() error {
-	if o.Distro.Family == "centos" {
-		majorVersion, err := o.Distro.MajorVersion()
-		if err != nil {
-			msg := fmt.Sprintf("Not implemented yet: %s, err: %s", o.Distro, err)
-			o.log.Errorf(msg)
-			return fmt.Errorf(msg)
-		}
-
-		var packName = "yum-plugin-changelog"
+		packName = "yum-plugin-changelog"
 		if majorVersion < 6 {
 			packName = "yum-changelog"
 		}
-
-		cmd := "rpm -q " + packName
-		if r := o.exec(cmd, noSudo); !r.isSuccess() {
-			msg := fmt.Sprintf("%s is not installed", packName)
-			o.log.Errorf(msg)
-			return fmt.Errorf(msg)
+	case "rhel":
+		if majorVersion < 6 {
+			packName = "yum-security"
+		} else {
+			// yum-plugin-security is installed by default on RHEL6, 7
+			return nil
 		}
+	default:
+		return fmt.Errorf("Not implemented yet: %s", o.Distro)
 	}
+
+	cmd := "rpm -q " + packName
+	if r := o.exec(cmd, noSudo); !r.isSuccess() {
+		msg := fmt.Sprintf("%s is not installed", packName)
+		o.log.Errorf(msg)
+		return fmt.Errorf(msg)
+	}
+	o.log.Infof("Dependencies... Pass")
 	return nil
 }
 
