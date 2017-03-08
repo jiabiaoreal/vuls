@@ -113,7 +113,7 @@ func detectOS(c config.ServerInfo) (osType osTypeInterface) {
 
 // PrintSSHableServerNames print SSH-able servernames
 func PrintSSHableServerNames() {
-	util.Log.Info("SSH-able servers are below...")
+	util.Log.Info("Scannable servers are below...")
 	for _, s := range servers {
 		if s.getServerInfo().IsContainer() {
 			fmt.Printf("%s@%s ",
@@ -340,7 +340,7 @@ func detectContainerOSesOnServer(containerHost osTypeInterface) (oses []osTypeIn
 
 // CheckIfSudoNoPasswd checks whether vuls can sudo with nopassword via SSH
 func CheckIfSudoNoPasswd() {
-	timeoutSec := 15
+	timeoutSec := 5 * 60
 	parallelExec(func(o osTypeInterface) error {
 		return o.checkIfSudoNoPasswd()
 	}, timeoutSec)

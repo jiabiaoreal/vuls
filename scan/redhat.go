@@ -102,13 +102,50 @@ func (o *redhat) checkIfSudoNoPasswd() error {
 		return nil
 	}
 
-	cmd := "yum --changelog --assumeno update yum"
-	r := o.exec(cmd, o.sudo())
-	if !r.isSuccess() {
-		o.log.Errorf("sudo error on %s", r)
-		return fmt.Errorf("Failed to sudo: %s", r)
+	type cmd struct {
+		cmd                 string
+		expectedStatusCodes []int
 	}
-	o.log.Infof("sudo ... OK")
+	var cmds []cmd
+	var zero = []int{0}
+
+	switch o.Distro.Family {
+	case "centos":
+		cmds = []cmd{
+			{"yum --changelog --assumeno update yum", zero},
+		}
+
+	case "rhel":
+		majorVersion, err := o.Distro.MajorVersion()
+		if err != nil {
+			return fmt.Errorf("Not implemented yet: %s, err: %s", o.Distro, err)
+		}
+
+		if majorVersion < 6 {
+			cmds = []cmd{
+				{"yum --color=never repolist", zero},
+				{"yum --color=never check-update", []int{0, 100}},
+				{"yum --color=never list-security --security", zero},
+				{"yum --color=never info-security", zero},
+			}
+		} else {
+			cmds = []cmd{
+				{"yum --color=never repolist", zero},
+				{"yum --color=never check-update", []int{0, 100}},
+				{"yum --color=never --security updateinfo list updates", zero},
+				{"yum --color=never --security updateinfo updates", zero},
+			}
+		}
+	}
+
+	for _, c := range cmds {
+		o.log.Infof("Checking... sudo %s", c.cmd)
+		r := o.exec(util.PrependProxyEnv(c.cmd), o.sudo())
+		if !r.isSuccess(c.expectedStatusCodes...) {
+			o.log.Errorf("Check sudo or proxy settings: %s", r)
+			return fmt.Errorf("Failed to sudo: %s", r)
+		}
+	}
 	return nil
 }
 
@@ -644,7 +681,7 @@ func (o *redhat) scanUnsecurePackagesUsingYumPluginSecurity() (models.VulnInfos,
 
 	// get advisoryID(RHSA, ALAS) - CVE IDs
 	if o.Distro.Family == "rhel" && major == 5 {
-		cmd = "yum --color=never info-sec"
+		cmd = "yum --color=never info-security"
 	} else {
 		cmd = "yum --color=never --security updateinfo updates"
 	}
