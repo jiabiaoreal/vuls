@@ -102,10 +102,7 @@ func (o *redhat) checkIfSudoNoPasswd() error {
 		return nil
 	}
 
-	cmd := "yum --version"
-	if o.Distro.Family == "centos" {
-		cmd = "echo N | " + cmd
-	}
+	cmd := "yum --changelog --assumeno update yum"
 	r := o.exec(cmd, o.sudo())
 	if !r.isSuccess() {
 		o.log.Errorf("sudo error on %s", r)
@@ -551,7 +548,7 @@ func (o *redhat) getAllChangelog(packInfoList models.PackageInfoList) (stdout st
 		packageNames += fmt.Sprintf("%s ", packInfo.Name)
 	}
 
-	command := "echo N | "
+	command := ""
 	if 0 < len(config.Conf.HTTPProxy) {
 		command += util.ProxyEnv()
 	}
@@ -565,7 +562,7 @@ func (o *redhat) getAllChangelog(packInfoList models.PackageInfoList) (stdout st
 	}
 
 	// yum update --changelog doesn't have --color option.
-	command += fmt.Sprintf(" LANGUAGE=en_US.UTF-8 yum %s --changelog update ", yumopts) + packageNames
+	command += fmt.Sprintf(" LANGUAGE=en_US.UTF-8 yum --changelog --assumeno update %s ", yumopts) + packageNames
 
 	r := o.exec(command, sudo)
 	if !r.isSuccess(0, 1) {
